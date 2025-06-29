@@ -25,7 +25,9 @@ const client = new MongoClient(uri, {
 const run = async () => {
   try {
     await client.connect();
-    const parcelsCollection = client.db("parcelsDB").collection("parcels");
+    const db = client.db("parcelsDB");
+    const parcelsCollection = db.collection("parcels");
+    const paymentsCollection = db.collection("payments");
 
     app.get("/parcels", async (req, res) => {
       try {
@@ -91,6 +93,55 @@ const run = async () => {
           .send({ message: "Parcel deleted successfully", result });
       } catch (error) {
         res.status(501).send({ message: "error deleting parcel", error });
+      }
+    });
+
+    app.get("/payments", async (req, res) => {
+      try {
+        const userEmail = req.query.email;
+        const query = userEmail ? { email: userEmail } : {};
+        const options = { sort: { paid_at: -1 } }; // Latest first
+
+        const payments = await paymentsCollection
+          .find(query, options)
+          .toArray();
+
+        res.send(payments);
+      } catch (error) {
+        res.send(500).send({ message: "Failed to get payments" });
+      }
+    });
+
+    app.post("/payments", async (req, res) => {
+      try {
+        const newPaymentData = req.body;
+        const query = { _id: new ObjectId(newPaymentData.parcelId) };
+        const updateDoc = {
+          $set: {
+            status: "Paid",
+          },
+        };
+
+        const result = await parcelsCollection.updateOne(query, updateDoc);
+        if (!result.modifiedCount) {
+          res.status(404).send({ message: "Parcel not found or already paid" });
+        }
+
+        const paymentDoc = {
+          ...newPaymentData,
+          paid_at_string: new Date().toISOString,
+          paid_at: new Date(),
+        };
+
+        const paymentResult = await paymentsCollection.insertOne(paymentDoc);
+        res.status(201).send({
+          message: "Payment recorded and parcel marked as paid",
+          insertedId: paymentResult.insertedId,
+        });
+      } catch (error) {
+        res
+          .status(501)
+          .send({ message: "Error fetching payments data", error });
       }
     });
 
