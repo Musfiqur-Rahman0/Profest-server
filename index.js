@@ -29,6 +29,7 @@ const run = async () => {
     const parcelsCollection = db.collection("parcels");
     const paymentsCollection = db.collection("payments");
     const trackingCollection = db.collection("trackings");
+    const ridersCollection = db.collection("riders");
 
     app.get("/parcels", async (req, res) => {
       try {
@@ -52,6 +53,7 @@ const run = async () => {
 
     app.post("/parcels", async (req, res) => {
       const newParcel = req.body;
+      newParcel.status = "Unpaid";
       const result = await parcelsCollection.insertOne(newParcel);
       res.send(result);
     });
@@ -182,6 +184,65 @@ const run = async () => {
         });
       } catch (err) {
         res.status(500).send({ message: err.message });
+      }
+    });
+
+    app.get("/ategories", async (req, res) => {
+      create;
+    });
+
+    // get riders from the database
+    app.get("/riders", async (req, res) => {
+      try {
+        const { status } = req.query;
+
+        let query = {};
+        if (status) {
+          query.status = { $regex: `^${status}$`, $options: "i" };
+        }
+
+        const riders = await ridersCollection.find(query).toArray();
+
+        res.status(200).send(riders);
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ message: "Failed to get riders from the database" });
+      }
+    });
+
+    // post riders to the database
+    app.post("/riders", async (req, res) => {
+      try {
+        const riderInfo = req.body;
+        console.log(riderInfo);
+
+        const newRider = {
+          ...riderInfo,
+          status: "pending",
+          requested_at: new Date().toISOString(),
+        };
+        const result = await ridersCollection.insertOne(newRider);
+        res.send(result);
+      } catch (error) {
+        res.status(501).send({ message: "Failed to add Rider" });
+      }
+    });
+
+    app.patch("/riders/:id", async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const result = await ridersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status } }
+      );
+
+      if (result.modifiedCount > 0) {
+        res.send({ message: "Rider status updated" });
+      } else {
+        res.status(400).send({ message: "Update failed" });
       }
     });
 
