@@ -32,13 +32,66 @@ const run = async () => {
     const ridersCollection = db.collection("riders");
     const usersCollection = db.collection("users");
 
+    app.get("/users", async (req, res) => {
+      try {
+        const { email } = req.query;
+
+        if (email) {
+          const query = {
+            email: { $regex: `^${email}$`, $options: "i" },
+          };
+          const user = await usersCollection.findOne(query);
+          if (user) {
+            return res.send(user);
+          } else {
+            return res.status(404).send({ message: "User not found" });
+          }
+        }
+
+        const users = await usersCollection.find().toArray();
+        res.send(users);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to load users" });
+      }
+    });
+
+    // updating user role
+    // PATCH /users/role/:email
+    app.patch("/users/role/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
+        const { role } = req.body;
+
+        if (!role || !["user", "admin", "rider"].includes(role)) {
+          return res.status(400).send({ message: "Invalid role" });
+        }
+
+        const query = { email };
+        const updateRole = {
+          $set: { role },
+        };
+
+        const result = await usersCollection.updateOne(query, updateRole);
+
+        if (result.modifiedCount > 0) {
+          res.send({ message: `User role updated to ${role}` });
+        } else {
+          res.status(404).send({ message: "User not found or role unchanged" });
+        }
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to update role" });
+      }
+    });
+
     app.post("/users", async (req, res) => {
       try {
         const newUser = req.body;
         const result = await usersCollection.insertOne(newUser);
         res.send(result);
       } catch (error) {
-        console.error(error);
+        // console.error(error);
         res.status(500).send({ message: "Failed to create user" });
       }
     });
@@ -259,7 +312,6 @@ const run = async () => {
             userQuery,
             userUpdate
           );
-          console.log("User role updated:", updatedUser.modifiedCount);
         }
 
         //  Always update the rider status in the RIDERS collection:
