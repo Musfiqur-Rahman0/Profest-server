@@ -30,6 +30,18 @@ const run = async () => {
     const paymentsCollection = db.collection("payments");
     const trackingCollection = db.collection("trackings");
     const ridersCollection = db.collection("riders");
+    const usersCollection = db.collection("users");
+
+    app.post("/users", async (req, res) => {
+      try {
+        const newUser = req.body;
+        const result = await usersCollection.insertOne(newUser);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to create user" });
+      }
+    });
 
     app.get("/parcels", async (req, res) => {
       try {
@@ -194,11 +206,14 @@ const run = async () => {
     // get riders from the database
     app.get("/riders", async (req, res) => {
       try {
-        const { status } = req.query;
+        const { status, search } = req.query;
 
         let query = {};
         if (status) {
           query.status = { $regex: `^${status}$`, $options: "i" };
+        }
+        if (search) {
+          query.name = { $regex: `^${search}$`, $options: "i" };
         }
 
         const riders = await ridersCollection.find(query).toArray();
@@ -231,18 +246,38 @@ const run = async () => {
     });
 
     app.patch("/riders/:id", async (req, res) => {
-      const { id } = req.params;
-      const { status } = req.body;
+      try {
+        const { id } = req.params;
+        const { status, email } = req.body;
 
-      const result = await ridersCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { status } }
-      );
+        //  If approved, update the user's role in the USERS collection:
+        if (status === "approved") {
+          const userQuery = { email: email };
+          console.log(email);
+          const userUpdate = { $set: { role: "rider" } };
+          const updatedUser = await usersCollection.updateOne(
+            userQuery,
+            userUpdate
+          );
+          console.log("User role updated:", updatedUser.modifiedCount);
+        }
 
-      if (result.modifiedCount > 0) {
-        res.send({ message: "Rider status updated" });
-      } else {
-        res.status(400).send({ message: "Update failed" });
+        //  Always update the rider status in the RIDERS collection:
+        const riderQuery = { _id: new ObjectId(id) };
+        const riderUpdate = { $set: { status } };
+        const result = await ridersCollection.updateOne(
+          riderQuery,
+          riderUpdate
+        );
+
+        if (result.modifiedCount > 0) {
+          res.send({ message: "Rider status updated" });
+        } else {
+          res.status(400).send({ message: "Rider status update failed" });
+        }
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Something went wrong" });
       }
     });
 
